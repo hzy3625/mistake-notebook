@@ -97,7 +97,7 @@ public final class MainActivity extends Activity {
         actions.addView(secondaryButton("错题库 / 导出 PDF", v -> showLibrary()));
         root.addView(actions);
 
-        root.addView(note("V0.1 以题目文本提取为主；提取失败时仍可保存原图，并按原图排版导出 PDF。"));
+        root.addView(note("V1.1 支持拍照后裁截错题区域，并可按每页 1/2/4 题导出 PDF。"));
         setRoot(root);
     }
 
@@ -219,6 +219,7 @@ public final class MainActivity extends Activity {
         LinearLayout actions = card();
         actions.addView(sectionTitle("科目与操作"));
         actions.addView(subjectSpinner);
+        actions.addView(secondaryButton("裁截图片", v -> showCrop()));
         actions.addView(primaryButton(analysisInProgress ? "提取中..." : "提取题目", v -> {
             if (!analysisInProgress) analyzeCurrent();
         }));
@@ -232,6 +233,41 @@ public final class MainActivity extends Activity {
             root.addView(textCard("干净题目文本", currentAnalysis.cleanQuestionText));
         }
         root.addView(secondaryButton("返回首页", v -> showHome()));
+        setRoot(root);
+    }
+
+    private void showCrop() {
+        Bitmap original = imageStore.load(currentOriginalPath);
+        if (original == null) {
+            toast("图片不存在");
+            return;
+        }
+        LinearLayout root = base("裁截错题");
+        root.addView(subtitle("拖动裁截框保留题目区域，保存后再提取题目或入库"));
+        CropImageView cropView = new CropImageView(this);
+        cropView.setBitmap(original);
+        LinearLayout.LayoutParams cropParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(520)
+        );
+        cropParams.setMargins(0, dp(10), 0, 0);
+        cropView.setLayoutParams(cropParams);
+        root.addView(cropView);
+        root.addView(primaryButton("保存裁截图", v -> {
+            try {
+                Bitmap cropped = cropView.crop();
+                currentOriginalPath = imageStore.saveBitmap(imageStore.limitSize(cropped, 2200), imageStore.originalDir());
+                currentProcessedPath = null;
+                currentAnalysis = BailianAnalysisResult.manual();
+                analysisProgress = "";
+                analysisInProgress = false;
+                toast("已保存裁截图");
+                showConfirm(false);
+            } catch (Exception e) {
+                toast("裁截失败: " + e.getMessage());
+            }
+        }));
+        root.addView(secondaryButton("返回确认页", v -> showConfirm(currentAnalysis.cleanQuestionText.length() > 0)));
         setRoot(root);
     }
 
@@ -335,6 +371,7 @@ public final class MainActivity extends Activity {
         LinearLayout exportPanel = card();
         exportPanel.addView(sectionTitle("导出"));
         exportPanel.addView(body("先勾选错题，再选择 A4 排版方式。"));
+        exportPanel.addView(primaryButton("导出 A4 PDF - 每页 1 题", v -> exportPdf(1)));
         exportPanel.addView(primaryButton("导出 A4 PDF - 每页 2 题", v -> exportPdf(2)));
         exportPanel.addView(secondaryButton("导出 A4 PDF - 每页 4 题", v -> exportPdf(4)));
         root.addView(exportPanel);

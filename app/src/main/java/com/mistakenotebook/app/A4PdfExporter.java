@@ -20,7 +20,7 @@ final class A4PdfExporter {
     private static final int PAGE_WIDTH = 595;
     private static final int PAGE_HEIGHT = 842;
     private static final int MARGIN = 36;
-    private static final int IMAGE_MARGIN = 12;
+    private static final int IMAGE_MARGIN = 8;
 
     private final Context context;
     private final ImageStore imageStore;
@@ -32,7 +32,7 @@ final class A4PdfExporter {
 
     File export(List<Mistake> mistakes, int perPage) throws Exception {
         if (mistakes.isEmpty()) throw new IllegalStateException("请先选择错题");
-        if (perPage != 2 && perPage != 4) perPage = 2;
+        if (perPage != 1 && perPage != 2 && perPage != 4) perPage = 2;
 
         PdfDocument document = new PdfDocument();
         Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
@@ -57,11 +57,12 @@ final class A4PdfExporter {
             PdfDocument.Page page = document.startPage(pageInfo);
             Canvas canvas = page.getCanvas();
             canvas.drawColor(0xFFFFFFFF);
-            float contentHeight = PAGE_HEIGHT - MARGIN * 2f;
+            float contentTop = IMAGE_MARGIN;
+            float contentHeight = PAGE_HEIGHT - IMAGE_MARGIN * 2f;
             float slotHeight = contentHeight / perPage;
             for (int i = 0; i < perPage && index < mistakes.size(); i++, index++) {
                 Mistake mistake = mistakes.get(index);
-                float top = MARGIN + i * slotHeight;
+                float top = contentTop + i * slotHeight;
                 drawMistake(canvas, paint, linePaint, textPaint, fractionPaint, metaPaint, mistake, top, slotHeight, perPage);
             }
             document.finishPage(page);
@@ -88,19 +89,20 @@ final class A4PdfExporter {
         if (bitmap == null) return;
         float left = IMAGE_MARGIN;
         float width = PAGE_WIDTH - IMAGE_MARGIN * 2f;
-        float maxImageHeight = slotHeight * (perPage == 2 ? 0.97f : 0.92f);
+        float maxImageHeight = slotHeight - 4f;
         float scale = Math.min(width / bitmap.getWidth(), maxImageHeight / bitmap.getHeight());
         float drawWidth = bitmap.getWidth() * scale;
         float drawHeight = bitmap.getHeight() * scale;
         float drawLeft = left + (width - drawWidth) / 2f;
-        RectF dst = new RectF(drawLeft, top + 2f, drawLeft + drawWidth, top + 2f + drawHeight);
+        float drawTop = top + (slotHeight - drawHeight) / 2f;
+        RectF dst = new RectF(drawLeft, drawTop, drawLeft + drawWidth, drawTop + drawHeight);
         canvas.drawBitmap(bitmap, null, dst, paint);
     }
 
     private void drawTextMistake(Canvas canvas, Paint linePaint, Paint textPaint, Paint fractionPaint, Paint metaPaint, Mistake mistake, float top, float slotHeight) {
         float left = MARGIN;
         float width = PAGE_WIDTH - MARGIN * 2f;
-        float y = top + 12;
+        float y = top + 24;
         canvas.drawText("#" + mistake.id + " " + mistake.subject.label + " 题目文本", left, y, metaPaint);
         y += 18;
 

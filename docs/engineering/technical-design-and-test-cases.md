@@ -1,18 +1,18 @@
-# Mistake Notebook V0.1 Technical Design And Test Cases
+# Mistake Notebook V1.1 Technical Design And Test Cases
 
 ## 1. Scope
 
-This document supports the V0.1 Android implementation.
+This document supports the V1.1 Android implementation.
 
-V0.1 is a native Android app implemented with Java and platform APIs. It is intentionally dependency-light so the release APK can be built from this repository without Gradle network dependency resolution.
+V1.1 is a native Android app implemented with Java and platform APIs. It is dependency-light so the release APK can be built from this repository without Gradle network dependency resolution.
 
-The current product flow is text-first:
+The current product flow is:
 
 ```text
-image input -> Bailian Qwen3-VL-Plus -> clean question text -> local save -> A4 PDF export
+image input -> crop -> Bailian Qwen3-VL-Plus -> clean question text -> local save -> A4 PDF export
 ```
 
-Automatic image-level handwriting removal is not part of the active V0.1 workflow.
+Automatic image-level handwriting removal is not part of the active V1.1 workflow.
 
 ## 2. Runtime Components
 
@@ -21,13 +21,23 @@ Automatic image-level handwriting removal is not part of the active V0.1 workflo
 | Main UI | `MainActivity` native Android views |
 | API key storage | `SecurePrefs` with Android Keystore AES/GCM |
 | Image storage | `ImageStore`, app-private files |
+| Image crop | `CropImageView` |
 | Data storage | `MistakeDatabase`, SQLiteOpenHelper |
 | Bailian client | `BailianClient`, OpenAI-compatible DashScope endpoint |
 | Text normalization | `CleanTextFormatter` |
 | PDF export | `A4PdfExporter`, Android `PdfDocument` |
 | File sharing | `SimpleFileProvider` |
 
-## 3. Bailian Integration
+## 3. V1.1 Technical Changes
+
+- `MistakeDatabase.listAll()` orders records by `created_at DESC`.
+- `CropImageView` provides rectangular crop with drag and corner resize handles.
+- Cropping saves a new JPEG into app-private original image storage and resets extraction state.
+- `A4PdfExporter` accepts `perPage = 1`, `2`, or `4`.
+- Image fallback export uses narrow margins and centers the largest aspect-ratio-preserving image inside each slot.
+- Manifest/build version updated to `versionCode=2`, `versionName=V1.1`.
+
+## 4. Bailian Integration
 
 Endpoint:
 
@@ -55,21 +65,38 @@ The request sends one text prompt and one base64 JPEG image. The prompt asks the
 - `warnings`
 - `clean_question_text`
 
-If the model returns plain text instead of JSON, V0.1 treats the content as `clean_question_text`.
+If the model returns plain text instead of JSON, V1.1 treats the content as `clean_question_text`.
 
-## 4. Text Formatting
+## 5. Crop Design
 
-The app normalizes common model output before display and PDF export:
+`CropImageView` is a custom view with:
 
-- remove Markdown fences;
-- remove `\(`, `\)`, `\[`, `\]`, and `$`;
-- convert `\frac{2}{7}` to `2/7`;
-- remove common LaTeX commands such as `\quad`;
-- keep question numbers and line breaks.
+- fit-center bitmap rendering;
+- movable crop rectangle;
+- draggable corner handles;
+- dimmed area outside crop rectangle;
+- conversion from view coordinates to bitmap coordinates;
+- JPEG save back into app-private original image storage.
 
-PDF export detects numeric fractions such as `2/7` and draws numerator, fraction bar, and denominator separately to produce a worksheet-like visual result.
+The crop view calls `requestDisallowInterceptTouchEvent(true)` while dragging so parent scrolling does not steal crop gestures.
 
-## 5. Data Model
+## 6. PDF Layout
+
+Text export:
+
+- A4 page: 595 x 842 points.
+- Text margin: 36 points.
+- Layout options: 1, 2, or 4 mistakes per page.
+- No answer guide lines are drawn; remaining space is blank.
+
+Image fallback export:
+
+- Preserve original image aspect ratio.
+- Use 8pt page/slot image margin.
+- Scale image to use most of the slot while staying inside page bounds.
+- Center image in its slot.
+
+## 7. Data Model
 
 `mistakes` stores:
 
@@ -83,31 +110,7 @@ PDF export detects numeric fractions such as `2/7` and draws numerator, fraction
 - `created_at`
 - `printed`
 
-`processed_image_path` and `use_processed_image` are retained for schema compatibility, but V0.1 export prefers `clean_question_text` and falls back to the original image.
-
-## 6. PDF Layout
-
-Text export:
-
-- A4 page: 595 x 842 points.
-- Main margin: 36 points.
-- Layout options: 2 or 4 mistakes per page.
-- No answer guide lines are drawn; remaining space is blank.
-
-Image fallback export:
-
-- Preserve original image aspect ratio.
-- Use a narrower image margin than text export.
-- Scale image to use most of the slot while staying inside page bounds.
-- Center image in its slot.
-
-## 7. Security
-
-- API Key is never committed.
-- API Key is not logged.
-- API Key is encrypted with Android Keystore-backed AES/GCM.
-- Stored images and database are app-private.
-- V0.1 calls Bailian directly from the app; a backend proxy is deferred.
+`processed_image_path` and `use_processed_image` are retained for schema compatibility, but V1.1 export prefers `clean_question_text` and falls back to the image.
 
 ## 8. Test Cases
 
@@ -121,13 +124,15 @@ Image fallback export:
 | SET-004 | Test connection failure | Use invalid API Key | Toast shows concrete auth or HTTP error |
 | SET-005 | Default model | Open settings first time | Model field shows Qwen3-VL-Plus default |
 
-### 8.2 Image Input
+### 8.2 Image Input And Crop
 
 | ID | Case | Steps | Expected |
 | --- | --- | --- | --- |
-| IMG-001 | Import from gallery | Choose image | Confirmation page shows original image |
+| IMG-001 | Import from gallery | Choose image | Confirmation page shows image |
 | IMG-002 | Capture by camera | Take photo | Confirmation page shows captured image |
-| IMG-003 | Large image | Import high-resolution image | Original is stored; analysis image is size-limited |
+| IMG-003 | Large image | Import high-resolution image | Image is stored and size-limited |
+| IMG-004 | Crop after input | Tap `裁截图片`, drag frame, save | Confirmation page shows cropped image |
+| IMG-005 | Crop bounds | Drag frame/corners outside image | Crop frame remains inside image bounds |
 
 ### 8.3 Question Extraction
 
@@ -137,7 +142,7 @@ Image fallback export:
 | EXT-002 | JSON response | Mock JSON with `clean_question_text` | Parser reads subject and clean text |
 | EXT-003 | Plain text response | Mock non-JSON text | App treats content as clean question text |
 | EXT-004 | Model returns LaTeX fraction | Return `\frac{2}{7}` | Display stores normalized `2/7` text |
-| EXT-005 | Network failure | Disable network or mock timeout | App shows extraction failure and allows saving original |
+| EXT-005 | Network failure | Disable network or mock timeout | App shows extraction failure and allows saving image |
 | EXT-006 | Missing API Key | Tap extract without Key | App asks user to configure API Key |
 
 ### 8.4 Library
@@ -145,23 +150,27 @@ Image fallback export:
 | ID | Case | Steps | Expected |
 | --- | --- | --- | --- |
 | LIB-001 | Save text result | Extract and save | Mistake appears in library as text item |
-| LIB-002 | Save original only | Save without extraction | Mistake appears in library as image item |
-| LIB-003 | Subject filter | Choose a subject filter | Only matching mistakes are shown |
-| LIB-004 | Select card | Tap select | Card background and border change |
-| LIB-005 | Detail page | Tap card body | Larger image and clean text are shown |
-| LIB-006 | Delete | Delete a mistake | Record disappears from library |
+| LIB-002 | Save image only | Save without extraction | Mistake appears in library as image item |
+| LIB-003 | Newest first | Save multiple mistakes | Newest mistake appears first |
+| LIB-004 | Subject filter | Choose a subject filter | Only matching mistakes are shown |
+| LIB-005 | Select card | Tap select | Card background and border change |
+| LIB-006 | Detail page | Tap card body | Larger image and clean text are shown |
+| LIB-007 | Delete | Delete a mistake | Record disappears from library |
 
 ### 8.5 PDF Export
 
 | ID | Case | Steps | Expected |
 | --- | --- | --- | --- |
 | PDF-001 | Export selected text | Select text mistake and export | PDF uses clean question text |
-| PDF-002 | Export selected image | Select image-only mistake and export | PDF uses original image |
-| PDF-003 | Fraction rendering | Export text containing `2/7` | PDF draws stacked fraction |
-| PDF-004 | Blank space | Export short text | No horizontal answer guide lines appear |
-| PDF-005 | Image aspect ratio | Export portrait/landscape images | Image is not stretched |
-| PDF-006 | File name | Open share sheet | PDF has a visible display name |
-| PDF-007 | Printed mark | Export selected mistakes | Selected records are marked printed |
+| PDF-002 | Export selected image | Select image-only mistake and export | PDF uses image |
+| PDF-003 | One per page | Export with `每页 1 题` | Each mistake gets a full page slot |
+| PDF-004 | Two per page | Export with `每页 2 题` | Page has up to two slots |
+| PDF-005 | Four per page | Export with `每页 4 题` | Page has up to four slots |
+| PDF-006 | Fraction rendering | Export text containing `2/7` | PDF draws stacked fraction |
+| PDF-007 | Image aspect ratio | Export portrait/landscape images | Image is not stretched |
+| PDF-008 | Image fills slot | Export image-only item | Image is scaled close to slot bounds |
+| PDF-009 | File name | Open share sheet | PDF has a visible display name |
+| PDF-010 | Printed mark | Export selected mistakes | Selected records are marked printed |
 
 ### 8.6 Build And Release
 
@@ -177,10 +186,12 @@ Image fallback export:
 2. Open app and confirm launcher label/icon.
 3. Save Bailian API Key in settings.
 4. Tap `测试连接`.
-5. Import a mistake image.
-6. Tap `提取题目`.
-7. Confirm progress and clean text display.
-8. Save the mistake.
-9. Filter library by subject.
-10. Select the mistake and export PDF.
-11. Open the PDF from the share/print sheet.
+5. Import or capture a mistake image.
+6. Tap `裁截图片`, drag the crop frame, and save.
+7. Tap `提取题目`.
+8. Confirm progress and clean text display.
+9. Save the mistake.
+10. Confirm newest-first order in library.
+11. Filter library by subject.
+12. Select the mistake and export PDF with 1/2/4 questions per page.
+13. Open the PDF from the share/print sheet.

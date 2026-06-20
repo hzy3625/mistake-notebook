@@ -1,4 +1,4 @@
-# Release V0.1
+# Release V1.1
 
 The installable Android APK should be placed in this folder:
 
@@ -14,4 +14,4 @@ Build command:
 
 The script uses the local Android SDK at `.android-sdk` by default, or `ANDROID_HOME` when set.
 
-Current release: `V0.1`.
+Current release: `V1.1`.
