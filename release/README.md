@@ -1,9 +1,9 @@
-# Release V1.2
+# Release V1.2.1
 
 The installable Android APK should be placed in this folder:
 
 ```text
-release/mistake-notebook-v1.2.apk
+release/mistake-notebook-v1.2.1.apk
 ```
 
 Build command:
@@ -14,4 +14,4 @@ Build command:
 
 The script uses the local Android SDK at `.android-sdk` by default, or `ANDROID_HOME` when set.
 
-Current release: `V1.2`.
+Current release: `V1.2.1`.

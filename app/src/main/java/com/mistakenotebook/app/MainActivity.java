@@ -60,6 +60,7 @@ public final class MainActivity extends Activity {
     private Subject libraryFilterSubject = null;
     private int exportPerPage = 2;
     private Uri pendingCameraUri;
+    private ScrollView currentScrollView;
     private final Set<Long> selectedForExport = new HashSet<>();
 
     @Override
@@ -92,11 +93,11 @@ public final class MainActivity extends Activity {
         actions.addView(sectionTitle("录入错题"));
         actions.addView(primaryButton("拍照记录错题", v -> capturePhoto()));
         actions.addView(secondaryButton("从相册导入", v -> pickImage()));
+        actions.addView(secondaryButton("错题库 / 导出 PDF", v -> showLibrary()));
         root.addView(actions);
 
         LinearLayout data = card();
         data.addView(sectionTitle("导出 / 导入"));
-        data.addView(primaryButton("错题库 / 导出 PDF", v -> showLibrary()));
         data.addView(secondaryButton("导出数据备份", v -> exportBackup()));
         data.addView(secondaryButton("导入数据备份", v -> pickBackup()));
         root.addView(data);
@@ -107,7 +108,7 @@ public final class MainActivity extends Activity {
         status.addView(secondaryButton("系统设置", v -> showSettings()));
         root.addView(status);
 
-        root.addView(note("V1.2 支持错题备份迁移、详情页修改科目，并优化错题库导出操作。"));
+        root.addView(note("V1.2.1 优化错题库选择和导出交互。"));
         setRoot(root);
     }
 
@@ -385,17 +386,20 @@ public final class MainActivity extends Activity {
 
     private void showLibrary() {
         selectedForExport.clear();
-        renderLibrary(database.listAll());
+        renderLibrary(database.listAll(), 0);
     }
 
     private void renderLibrary(List<Mistake> mistakes) {
+        renderLibrary(mistakes, 0);
+    }
+
+    private void renderLibrary(List<Mistake> mistakes, int scrollY) {
         LinearLayout root = base("错题库");
         List<Mistake> visibleMistakes = filterMistakes(mistakes);
         root.addView(subtitle("共 " + mistakes.size() + " 道错题，当前显示 " + visibleMistakes.size() + " 道，已选择 " + selectedForExport.size() + " 道"));
 
         LinearLayout topActions = card();
         topActions.addView(primaryButton("返回首页", v -> showHome()));
-        topActions.addView(body("错题按保存时间倒序排列。点击卡片查看详情，右侧按钮用于选择导出。"));
         root.addView(topActions);
 
         LinearLayout filterPanel = card();
@@ -410,7 +414,7 @@ public final class MainActivity extends Activity {
                 Subject next = position == 0 ? null : Subject.values()[position - 1];
                 if (next != libraryFilterSubject) {
                     libraryFilterSubject = next;
-                    renderLibrary(database.listAll());
+                    renderLibrary(database.listAll(), 0);
                 }
             }
 
@@ -440,20 +444,16 @@ public final class MainActivity extends Activity {
         });
         exportPanel.addView(exportSpinner);
         exportPanel.addView(primaryButton("导出 A4 PDF", v -> exportPdf(exportPerPage)));
-        exportPanel.addView(secondaryButton("选择当前显示错题", v -> {
-            for (Mistake mistake : visibleMistakes) selectedForExport.add(mistake.id);
-            renderLibrary(mistakes);
-        }));
         exportPanel.addView(secondaryButton("清空选择", v -> {
             selectedForExport.clear();
-            renderLibrary(mistakes);
+            renderLibrary(mistakes, currentScrollY());
         }));
         root.addView(exportPanel);
 
         for (Mistake mistake : visibleMistakes) {
             root.addView(mistakeCard(mistake, mistakes));
         }
-        setRoot(root);
+        setRoot(root, scrollY);
     }
 
     private List<Mistake> filterMistakes(List<Mistake> mistakes) {
@@ -504,13 +504,17 @@ public final class MainActivity extends Activity {
         Button select = compactButton(selected ? "取消" : "选择", v -> {
             if (selectedForExport.contains(mistake.id)) selectedForExport.remove(mistake.id);
             else selectedForExport.add(mistake.id);
-            renderLibrary(sourceList);
+            renderLibrary(sourceList, currentScrollY());
         });
         row.addView(select);
         return row;
     }
 
     private void showMistakeDetail(Mistake mistake) {
+        showMistakeDetail(mistake, 0);
+    }
+
+    private void showMistakeDetail(Mistake mistake, int scrollY) {
         LinearLayout root = base("错题详情");
         String date = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA).format(new Date(mistake.createdAt));
         root.addView(subtitle("#" + mistake.id + " · " + mistake.subject.label + " · " + date));
@@ -539,17 +543,17 @@ public final class MainActivity extends Activity {
             database.updateSubject(mistake.id, nextSubject[0]);
             mistake.subject = nextSubject[0];
             toast("科目已更新");
-            showMistakeDetail(mistake);
+            showMistakeDetail(mistake, currentScrollY());
         }));
         root.addView(subjectPanel);
         root.addView(primaryButton(selectedForExport.contains(mistake.id) ? "取消选择导出" : "选择导出", v -> {
             if (selectedForExport.contains(mistake.id)) selectedForExport.remove(mistake.id);
             else selectedForExport.add(mistake.id);
-            showMistakeDetail(mistake);
+            showMistakeDetail(mistake, currentScrollY());
         }));
         root.addView(dangerButton("删除错题", v -> confirmDelete(mistake.id)));
-        root.addView(secondaryButton("返回错题库", v -> renderLibrary(database.listAll())));
-        setRoot(root);
+        root.addView(secondaryButton("返回错题库", v -> renderLibrary(database.listAll(), 0)));
+        setRoot(root, scrollY);
     }
 
     private void confirmDelete(long id) {
@@ -637,10 +641,20 @@ public final class MainActivity extends Activity {
     }
 
     private void setRoot(LinearLayout root) {
+        setRoot(root, 0);
+    }
+
+    private void setRoot(LinearLayout root, int scrollY) {
         ScrollView scrollView = new ScrollView(this);
         scrollView.setBackgroundColor(COLOR_BG);
         scrollView.addView(root);
+        currentScrollView = scrollView;
         setContentView(scrollView);
+        if (scrollY > 0) scrollView.post(() -> scrollView.scrollTo(0, scrollY));
+    }
+
+    private int currentScrollY() {
+        return currentScrollView == null ? 0 : currentScrollView.getScrollY();
     }
 
     private TextView label(String text) {

@@ -1,25 +1,23 @@
-# Mistake Notebook V1.2 Test Report
+# Mistake Notebook V1.2.1 Test Report
 
 ## Build Artifact
 
-- APK: `release/mistake-notebook-v1.2.apk`
+- APK: `release/mistake-notebook-v1.2.1.apk`
 - Package: `com.mistakenotebook.app`
 - App label: `错题本`
-- Version: `V1.2`
-- Version code: `3`
+- Version: `V1.2.1`
+- Version code: `4`
 - Min SDK: `23`
 - Target SDK: `35`
 
 ## Implemented Scope
 
-- Home page reordered by operation frequency.
-- Library top area now contains `返回首页`.
-- Library export actions merged into one primary `导出 A4 PDF` button with a layout selector.
-- Export default layout is `每页 2 题`.
-- Export still supports `每页 1 题`, `每页 2 题`, and `每页 4 题`.
-- Detail page supports subject classification update.
-- Data backup export/import supports moving mistakes between phones.
-- Release APK filename includes version.
+- Home `错题库 / 导出 PDF` moved into `录入错题`.
+- Library `返回首页` card no longer shows extra hint text.
+- Library export area removed `选择当前显示错题`.
+- Library selection preserves scroll position after card selection changes.
+- Detail page preserves scroll position after export-selection changes.
+- Detail page preserves scroll position after subject updates.
 
 ## Verification
 
@@ -29,19 +27,15 @@
 | Versioned APK generated under `release/` | Passed |
 | APK signature verification v1/v2/v3 | Passed |
 | Package metadata dump | Passed |
-| `versionCode=3` and `versionName=V1.2` present | Passed |
-| Backup export/import code compiles | Passed |
-| Subject update code compiles | Passed |
-| One-button PDF export code compiles | Passed |
+| `versionCode=4` and `versionName=V1.2.1` present | Passed |
+| Scroll-retention code compiles | Passed |
+| Removed obsolete library actions | Passed |
 
 ## Device Smoke Test
 
-1. Install `release/mistake-notebook-v1.2.apk`.
-2. Confirm app version `V1.2`.
-3. Confirm home order: record, export/import, Bailian config.
-4. Open library and confirm `返回首页` near top.
-5. Select mistakes, keep default `每页 2 题`, export PDF.
-6. Switch to `每页 1 题` and `每页 4 题`, export again.
-7. Open detail and update subject.
-8. Export backup zip.
-9. Import backup zip on another phone or fresh install.
+1. Install `release/mistake-notebook-v1.2.1.apk`.
+2. Confirm home `错题库 / 导出 PDF` appears under `录入错题`.
+3. Open library and confirm `返回首页` is near top without hint text.
+4. Confirm export area has one primary export button and no `选择当前显示错题`.
+5. Scroll down a long library and select a card; confirm scroll position is retained.
+6. Open detail, scroll down, toggle selection and update subject; confirm scroll position is retained.
