@@ -50,6 +50,12 @@ final class MistakeDatabase extends SQLiteOpenHelper {
         return getWritableDatabase().insertOrThrow("mistakes", null, values);
     }
 
+    void updateSubject(long id, Subject subject) {
+        ContentValues values = new ContentValues();
+        values.put("subject", subject.name());
+        getWritableDatabase().update("mistakes", values, "id=?", new String[]{String.valueOf(id)});
+    }
+
     List<Mistake> listAll() {
         ArrayList<Mistake> result = new ArrayList<>();
         Cursor cursor = getReadableDatabase().query(

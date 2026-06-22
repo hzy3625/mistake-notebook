@@ -1,69 +1,47 @@
-# Mistake Notebook V1.1 Test Report
+# Mistake Notebook V1.2 Test Report
 
 ## Build Artifact
 
-- APK: `release/mistake-notebook-mvp.apk`
+- APK: `release/mistake-notebook-v1.2.apk`
 - Package: `com.mistakenotebook.app`
 - App label: `错题本`
-- Version: `V1.1`
-- Version code: `2`
+- Version: `V1.2`
+- Version code: `3`
 - Min SDK: `23`
 - Target SDK: `35`
 
 ## Implemented Scope
 
-- Custom launcher logo.
-- Local settings page for Alibaba Bailian API Key and model.
-- API Key encrypted locally with Android Keystore AES/GCM.
-- Default model: `Qwen3-VL-Plus` / `qwen3-vl-plus`.
-- Camera capture and gallery import.
-- Image cropping after capture/import.
-- App-private image storage.
-- `提取题目` flow through Bailian multimodal API.
-- Step-by-step extraction progress display.
-- Clean question text display and persistence.
-- Local SQLite mistake library ordered by newest first.
-- Subject filter in library.
-- Compact mistake cards with selected-state highlighting.
-- Detail page for image and extracted text.
-- A4 PDF export with 1-per-page, 2-per-page, and 4-per-page layout.
-- PDF export prefers clean text and falls back to image.
-- PDF text renderer draws numeric fractions in worksheet style.
-- PDF image fallback preserves aspect ratio and fills page slots with narrow margins.
-- PDF share/print handoff through a local read-only content provider.
+- Home page reordered by operation frequency.
+- Library top area now contains `返回首页`.
+- Library export actions merged into one primary `导出 A4 PDF` button with a layout selector.
+- Export default layout is `每页 2 题`.
+- Export still supports `每页 1 题`, `每页 2 题`, and `每页 4 题`.
+- Detail page supports subject classification update.
+- Data backup export/import supports moving mistakes between phones.
+- Release APK filename includes version.
 
-## Automated / Static Verification
+## Verification
 
 | Check | Result |
 | --- | --- |
 | Manual Android SDK build script completed | Passed |
-| APK generated under `release/` | Passed |
+| Versioned APK generated under `release/` | Passed |
 | APK signature verification v1/v2/v3 | Passed |
 | Package metadata dump | Passed |
-| `versionCode=2` and `versionName=V1.1` present | Passed |
-| App label present | Passed |
-| App icon present | Passed |
-| APK contains `classes.dex` | Passed |
-| Crop image UI compiles | Passed |
-| 1/2/4 PDF export path compiles | Passed |
-| Library query orders by `created_at DESC` | Passed by code review |
+| `versionCode=3` and `versionName=V1.2` present | Passed |
+| Backup export/import code compiles | Passed |
+| Subject update code compiles | Passed |
+| One-button PDF export code compiles | Passed |
 
-## V1.1 Device Smoke Test
+## Device Smoke Test
 
-ADB device testing requires a connected and authorized Android phone.
-
-Recommended smoke test:
-
-1. Copy and install `release/mistake-notebook-mvp.apk`.
-2. Confirm app version `V1.1`, launcher icon, and app label `错题本`.
-3. Save Bailian API Key/model in settings.
-4. Tap `测试连接`.
-5. Import or capture a mistake image.
-6. Tap `裁截图片`, drag the crop frame, and save crop.
-7. Tap `提取题目`.
-8. Confirm progress and extracted text.
-9. Save the mistake.
-10. Add another mistake and confirm newest-first order.
-11. Filter by subject in library.
-12. Select one or more mistakes.
-13. Export A4 PDF with 1/2/4 questions per page and open the share/print sheet.
+1. Install `release/mistake-notebook-v1.2.apk`.
+2. Confirm app version `V1.2`.
+3. Confirm home order: record, export/import, Bailian config.
+4. Open library and confirm `返回首页` near top.
+5. Select mistakes, keep default `每页 2 题`, export PDF.
+6. Switch to `每页 1 题` and `每页 4 题`, export again.
+7. Open detail and update subject.
+8. Export backup zip.
+9. Import backup zip on another phone or fresh install.

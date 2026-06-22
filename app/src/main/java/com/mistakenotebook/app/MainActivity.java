@@ -36,6 +36,7 @@ import java.util.Set;
 public final class MainActivity extends Activity {
     private static final int REQ_GALLERY = 1001;
     private static final int REQ_CAMERA = 1002;
+    private static final int REQ_BACKUP_IMPORT = 1003;
     private static final int COLOR_BG = 0xFFF4F6F5;
     private static final int COLOR_CARD = 0xFFFFFFFF;
     private static final int COLOR_TEXT = 0xFF1D2327;
@@ -48,6 +49,7 @@ public final class MainActivity extends Activity {
     private SecurePrefs securePrefs;
     private MistakeDatabase database;
     private ImageStore imageStore;
+    private MistakeBackupStore backupStore;
     private final BailianClient bailianClient = new BailianClient();
     private String currentOriginalPath;
     private String currentProcessedPath;
@@ -56,6 +58,7 @@ public final class MainActivity extends Activity {
     private boolean analysisInProgress = false;
     private Subject selectedSubject = Subject.OTHER;
     private Subject libraryFilterSubject = null;
+    private int exportPerPage = 2;
     private Uri pendingCameraUri;
     private final Set<Long> selectedForExport = new HashSet<>();
 
@@ -65,6 +68,7 @@ public final class MainActivity extends Activity {
         securePrefs = new SecurePrefs(this);
         database = new MistakeDatabase(this);
         imageStore = new ImageStore(this);
+        backupStore = new MistakeBackupStore(this, imageStore, database);
         showHome();
     }
 
@@ -84,20 +88,26 @@ public final class MainActivity extends Activity {
         brand.addView(brandText);
         root.addView(brand);
 
+        LinearLayout actions = card();
+        actions.addView(sectionTitle("录入错题"));
+        actions.addView(primaryButton("拍照记录错题", v -> capturePhoto()));
+        actions.addView(secondaryButton("从相册导入", v -> pickImage()));
+        root.addView(actions);
+
+        LinearLayout data = card();
+        data.addView(sectionTitle("导出 / 导入"));
+        data.addView(primaryButton("错题库 / 导出 PDF", v -> showLibrary()));
+        data.addView(secondaryButton("导出数据备份", v -> exportBackup()));
+        data.addView(secondaryButton("导入数据备份", v -> pickBackup()));
+        root.addView(data);
+
         LinearLayout status = card();
         status.addView(sectionTitle("百炼配置"));
         status.addView(body("API Key: " + securePrefs.apiKeyPreview()));
         status.addView(secondaryButton("系统设置", v -> showSettings()));
         root.addView(status);
 
-        LinearLayout actions = card();
-        actions.addView(sectionTitle("录入错题"));
-        actions.addView(primaryButton("拍照记录错题", v -> capturePhoto()));
-        actions.addView(secondaryButton("从相册导入", v -> pickImage()));
-        actions.addView(secondaryButton("错题库 / 导出 PDF", v -> showLibrary()));
-        root.addView(actions);
-
-        root.addView(note("V1.1 支持拍照后裁截错题区域，并可按每页 1/2/4 题导出 PDF。"));
+        root.addView(note("V1.2 支持错题备份迁移、详情页修改科目，并优化错题库导出操作。"));
         setRoot(root);
     }
 
@@ -160,6 +170,12 @@ public final class MainActivity extends Activity {
         startActivityForResult(Intent.createChooser(intent, "选择错题图片"), REQ_GALLERY);
     }
 
+    private void pickBackup() {
+        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+        intent.setType("*/*");
+        startActivityForResult(Intent.createChooser(intent, "选择错题备份文件"), REQ_BACKUP_IMPORT);
+    }
+
     private void capturePhoto() {
         try {
             File dir = new File(getFilesDir(), "capture");
@@ -180,6 +196,10 @@ public final class MainActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
         if (resultCode != RESULT_OK) return;
         try {
+            if (requestCode == REQ_BACKUP_IMPORT) {
+                importBackup(data == null ? null : data.getData());
+                return;
+            }
             Uri uri = requestCode == REQ_CAMERA ? pendingCameraUri : data.getData();
             currentOriginalPath = imageStore.saveFromUri(uri);
             currentProcessedPath = null;
@@ -191,6 +211,34 @@ public final class MainActivity extends Activity {
         } catch (Exception e) {
             toast("图片读取失败: " + e.getMessage());
         }
+    }
+
+    private void exportBackup() {
+        try {
+            File backup = backupStore.exportBackup();
+            shareFile(backup, "application/zip", "分享错题备份");
+        } catch (Exception e) {
+            toast("导出备份失败: " + e.getMessage());
+        }
+    }
+
+    private void importBackup(Uri uri) {
+        if (uri == null) {
+            toast("未选择备份文件");
+            return;
+        }
+        toast("正在导入备份...");
+        new Thread(() -> {
+            try {
+                int count = backupStore.importBackup(uri);
+                runOnUiThread(() -> {
+                    toast("已导入 " + count + " 道错题");
+                    showLibrary();
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> toast("导入备份失败: " + e.getMessage()));
+            }
+        }).start();
     }
 
     private void showConfirm(boolean analyzed) {
@@ -345,6 +393,11 @@ public final class MainActivity extends Activity {
         List<Mistake> visibleMistakes = filterMistakes(mistakes);
         root.addView(subtitle("共 " + mistakes.size() + " 道错题，当前显示 " + visibleMistakes.size() + " 道，已选择 " + selectedForExport.size() + " 道"));
 
+        LinearLayout topActions = card();
+        topActions.addView(primaryButton("返回首页", v -> showHome()));
+        topActions.addView(body("错题按保存时间倒序排列。点击卡片查看详情，右侧按钮用于选择导出。"));
+        root.addView(topActions);
+
         LinearLayout filterPanel = card();
         filterPanel.addView(sectionTitle("筛选"));
         Spinner filterSpinner = new Spinner(this);
@@ -370,16 +423,36 @@ public final class MainActivity extends Activity {
 
         LinearLayout exportPanel = card();
         exportPanel.addView(sectionTitle("导出"));
-        exportPanel.addView(body("先勾选错题，再选择 A4 排版方式。"));
-        exportPanel.addView(primaryButton("导出 A4 PDF - 每页 1 题", v -> exportPdf(1)));
-        exportPanel.addView(primaryButton("导出 A4 PDF - 每页 2 题", v -> exportPdf(2)));
-        exportPanel.addView(secondaryButton("导出 A4 PDF - 每页 4 题", v -> exportPdf(4)));
+        exportPanel.addView(body("默认每页 2 题，可在下方切换排版。"));
+        Spinner exportSpinner = new Spinner(this);
+        String[] exportOptions = new String[]{"每页 1 题", "每页 2 题", "每页 4 题"};
+        exportSpinner.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, exportOptions));
+        exportSpinner.setSelection(exportPerPage == 1 ? 0 : exportPerPage == 4 ? 2 : 1);
+        exportSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                exportPerPage = position == 0 ? 1 : position == 2 ? 4 : 2;
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
+        exportPanel.addView(exportSpinner);
+        exportPanel.addView(primaryButton("导出 A4 PDF", v -> exportPdf(exportPerPage)));
+        exportPanel.addView(secondaryButton("选择当前显示错题", v -> {
+            for (Mistake mistake : visibleMistakes) selectedForExport.add(mistake.id);
+            renderLibrary(mistakes);
+        }));
+        exportPanel.addView(secondaryButton("清空选择", v -> {
+            selectedForExport.clear();
+            renderLibrary(mistakes);
+        }));
         root.addView(exportPanel);
 
         for (Mistake mistake : visibleMistakes) {
             root.addView(mistakeCard(mistake, mistakes));
         }
-        root.addView(secondaryButton("返回首页", v -> showHome()));
         setRoot(root);
     }
 
@@ -445,6 +518,30 @@ public final class MainActivity extends Activity {
         if (image != null) root.addView(previewCard("原图", image));
         if (hasCleanText(mistake)) root.addView(textCard("干净题目文本", mistake.cleanQuestionText));
         root.addView(note(mistake.analysisJson == null || "{}".equals(mistake.analysisJson) ? "未保存题目提取结果。" : "已保存题目提取结果。"));
+        LinearLayout subjectPanel = card();
+        subjectPanel.addView(sectionTitle("科目分类"));
+        Spinner subjectSpinner = new Spinner(this);
+        subjectSpinner.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, Subject.labels()));
+        subjectSpinner.setSelection(mistake.subject.ordinal());
+        final Subject[] nextSubject = new Subject[]{mistake.subject};
+        subjectSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                nextSubject[0] = Subject.values()[position];
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
+        subjectPanel.addView(subjectSpinner);
+        subjectPanel.addView(secondaryButton("保存科目分类", v -> {
+            database.updateSubject(mistake.id, nextSubject[0]);
+            mistake.subject = nextSubject[0];
+            toast("科目已更新");
+            showMistakeDetail(mistake);
+        }));
+        root.addView(subjectPanel);
         root.addView(primaryButton(selectedForExport.contains(mistake.id) ? "取消选择导出" : "选择导出", v -> {
             if (selectedForExport.contains(mistake.id)) selectedForExport.remove(mistake.id);
             else selectedForExport.add(mistake.id);
@@ -486,15 +583,19 @@ public final class MainActivity extends Activity {
     }
 
     private void sharePdf(File pdf) {
-        Uri uri = SimpleFileProvider.uriFor(pdf, getFilesDir());
+        shareFile(pdf, "application/pdf", "分享或打印 PDF");
+    }
+
+    private void shareFile(File file, String mimeType, String chooserTitle) {
+        Uri uri = SimpleFileProvider.uriFor(file, getFilesDir());
         Intent intent = new Intent(Intent.ACTION_SEND);
-        intent.setType("application/pdf");
+        intent.setType(mimeType);
         intent.putExtra(Intent.EXTRA_STREAM, uri);
-        intent.putExtra(Intent.EXTRA_TITLE, pdf.getName());
-        intent.putExtra(Intent.EXTRA_SUBJECT, pdf.getName());
-        intent.setClipData(ClipData.newUri(getContentResolver(), pdf.getName(), uri));
+        intent.putExtra(Intent.EXTRA_TITLE, file.getName());
+        intent.putExtra(Intent.EXTRA_SUBJECT, file.getName());
+        intent.setClipData(ClipData.newUri(getContentResolver(), file.getName(), uri));
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        startActivity(Intent.createChooser(intent, "分享或打印 PDF"));
+        startActivity(Intent.createChooser(intent, chooserTitle));
     }
 
     private String analysisText() {

@@ -61,6 +61,19 @@ final class ImageStore {
         return file.getAbsolutePath();
     }
 
+    String saveBytes(byte[] bytes, File dir, String extension) throws Exception {
+        if (!dir.exists()) dir.mkdirs();
+        String suffix = extension == null || extension.length() == 0 ? ".bin" : extension;
+        File file = new File(dir, UUID.randomUUID() + suffix);
+        FileOutputStream output = new FileOutputStream(file);
+        try {
+            output.write(bytes);
+        } finally {
+            output.close();
+        }
+        return file.getAbsolutePath();
+    }
+
     Bitmap load(String path) {
         return BitmapFactory.decodeFile(path);
     }
@@ -74,4 +87,3 @@ final class ImageStore {
         return Bitmap.createScaledBitmap(bitmap, Math.round(width * scale), Math.round(height * scale), true);
     }
 }
-

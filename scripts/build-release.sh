@@ -9,6 +9,8 @@ OUT_DIR="$ROOT_DIR/build/manual"
 APP_DIR="$ROOT_DIR/app/src/main"
 RELEASE_DIR="$ROOT_DIR/release"
 PACKAGE="com.mistakenotebook.app"
+VERSION_NAME="$(sed -n 's/.*android:versionName="\([^"]*\)".*/\1/p' "$APP_DIR/AndroidManifest.xml" | head -1 | tr '[:upper:]' '[:lower:]')"
+OUTPUT_APK="$RELEASE_DIR/mistake-notebook-${VERSION_NAME}.apk"
 
 if [[ ! -f "$PLATFORM_JAR" ]]; then
   echo "Missing Android platform jar: $PLATFORM_JAR" >&2
@@ -72,8 +74,8 @@ fi
   --ks-pass pass:android \
   --key-pass pass:android \
   --v4-signing-enabled false \
-  --out "$RELEASE_DIR/mistake-notebook-mvp.apk" \
+  --out "$OUTPUT_APK" \
   "$OUT_DIR/aligned.apk"
 
-"$BUILD_TOOLS/apksigner" verify --verbose "$RELEASE_DIR/mistake-notebook-mvp.apk"
-echo "APK created: $RELEASE_DIR/mistake-notebook-mvp.apk"
+"$BUILD_TOOLS/apksigner" verify --verbose "$OUTPUT_APK"
+echo "APK created: $OUTPUT_APK"
